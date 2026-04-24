@@ -43,7 +43,8 @@ async function bootstrap() {
   const logger = new Logger('BOOTSTRAP');
 
   const config = new DocumentBuilder()
-    .setTitle('API Gateway')
+    .setTitle('Mshindi Labs API Gateway')
+    .setDescription('Mshindi Labs API Gateway')
     .setVersion('1.0')
     .addBearerAuth(
       {

@@ -21,6 +21,7 @@ import { Throttle, SkipThrottle } from '@nestjs/throttler';
 import {
   ApiOperation,
   ApiResponse,
+  ApiBody,
   ApiBearerAuth,
   ApiTags,
 } from '@nestjs/swagger';
@@ -32,17 +33,17 @@ import type { AuthorizedUser } from '@app/common/types/authenticated-request';
 import { OkResponseDto } from '@app/common/dto';
 import { FRONTEND_AUTH_CALLBACK_URL } from '@app/common/constants';
 import { AUTH_PATTERNS, AUTH_SERVICE } from '@app/contracts';
-import type { SignupDto } from './dto/signup.dto';
-import type { LoginDto } from './dto/login.dto';
-import type { RefreshTokenDto } from './dto/refresh-token.dto';
-import type { UpdatePasswordDto } from './dto/update-password.dto';
-import type {
+import { SignupDto } from './dto/signup.dto';
+import { LoginDto } from './dto/login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { UpdatePasswordDto } from './dto/update-password.dto';
+import {
   RequestPasswordResetDto,
   ResetPasswordDto,
 } from './dto/reset-password.dto';
-import type { RequestOtpDto } from './dto/request-otp.dto';
-import type { VerifyOtpDto } from './dto/verify-otp.dto';
-import type { SwitchOrgDto } from './dto/switch-org.dto';
+import { RequestOtpDto } from './dto/request-otp.dto';
+import { VerifyOtpDto } from './dto/verify-otp.dto';
+import { SwitchOrgDto } from './dto/switch-org.dto';
 import {
   AuthResponseDto,
   CurrentUserResponseDto,
@@ -70,10 +71,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login a user' })
   @ApiResponse({ status: 200, type: AuthResponseDto })
-  login(
-    @Body() dto: LoginDto,
-    @Req() req: Request,
-  ): Promise<AuthResponseDto> {
+  login(@Body() dto: LoginDto, @Req() req: Request): Promise<AuthResponseDto> {
     return firstValueFrom(
       this.authClient.send(AUTH_PATTERNS.LOGIN, {
         ...dto,
@@ -232,9 +230,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revoke all sessions for the current user' })
   @ApiResponse({ status: 200, type: OkResponseDto })
-  async revokeAllSessions(@User() user: AuthorizedUser): Promise<OkResponseDto> {
+  async revokeAllSessions(
+    @User() user: AuthorizedUser,
+  ): Promise<OkResponseDto> {
     await firstValueFrom(
-      this.authClient.send(AUTH_PATTERNS.REVOKE_ALL_SESSIONS, { context: user }),
+      this.authClient.send(AUTH_PATTERNS.REVOKE_ALL_SESSIONS, {
+        context: user,
+      }),
     );
     return { message: 'All sessions revoked successfully' };
   }
@@ -257,6 +259,12 @@ export class AuthController {
   @Post('email/verify')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify email with OTP code' })
+  @ApiBody({
+    schema: {
+      properties: { otpCode: { type: 'string', example: '123456' } },
+      required: ['otpCode'],
+    },
+  })
   @ApiResponse({ status: 200, type: OkResponseDto })
   verifyEmail(
     @User() user: AuthorizedUser,

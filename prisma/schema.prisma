@@ -21,6 +21,7 @@ model Organization {
   isActive    Boolean                  @default(true) @map("is_active")
   members     OrganizationMembership[]
   invitations Invitation[]
+  roles       Roles[]
   deletedAt   DateTime?                @map("deleted_at")
   createdBy   String?                  @map("created_by")
   updatedBy   String?                  @map("updated_by")
@@ -32,19 +33,27 @@ model Organization {
 
 // ─── Roles ────────────────────────────────────────────────────────────────────
 
-// Roles are global; the role-in-org pairing lives on OrganizationMembership.
-// A user can hold different roles across different organizations.
+// Hybrid role model: organizationId = null means a platform-level system role
+// (e.g. "other", "superadmin") visible across the whole platform.
+// organizationId non-null means a role scoped to a specific organization.
+// @@unique([name, organizationId]) enforces uniqueness within each org; system
+// roles are unique by name at the application layer because PostgreSQL treats
+// NULL != NULL in unique indexes (see RolesService.create).
 model Roles {
-  id          String                   @id @default(uuid())
-  name        String                   @unique
-  members     OrganizationMembership[]
-  invitations Invitation[]
-  createdBy   String?                  @map("created_by")
-  updatedBy   String?                  @map("updated_by")
-  createdAt   DateTime                 @default(now()) @map("created_at")
-  updatedAt   DateTime                 @updatedAt @map("updated_at")
+  id             String                   @id @default(uuid())
+  name           String
+  organizationId String?                  @map("organization_id")
+  organization   Organization?            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  members        OrganizationMembership[]
+  invitations    Invitation[]
+  createdBy      String?                  @map("created_by")
+  updatedBy      String?                  @map("updated_by")
+  createdAt      DateTime                 @default(now()) @map("created_at")
+  updatedAt      DateTime                 @updatedAt @map("updated_at")
 
-  @@map("roles")
+  @@unique([name, organizationId])
+  @@index([organizationId])
+  @@map("auth_roles")
 }
 
 // ─── Users ────────────────────────────────────────────────────────────────────

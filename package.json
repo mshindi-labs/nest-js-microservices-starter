@@ -5,6 +5,9 @@
   "author": "Baraka-Mulumia",
   "private": true,
   "license": "UNLICENSED",
+  "prisma": {
+    "seed": "ts-node -r tsconfig-paths/register prisma/seed.ts"
+  },
   "scripts": {
     "prepare": "husky",
     "build": "nest build api-gateway && nest build auth-service",

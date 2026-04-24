@@ -17,6 +17,7 @@ describe('UsersService', () => {
   const mockRole = {
     id: ROLE_ID,
     name: 'student',
+    organizationId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     createdBy: null,
@@ -107,11 +108,21 @@ describe('UsersService', () => {
               findUnique: jest.fn(),
               update: jest.fn(),
             },
-            $transaction: jest.fn((fn) => fn({
-              user: { create: jest.fn().mockResolvedValue(mockUser), update: jest.fn(), findUnique: jest.fn().mockResolvedValue(mockUser) },
-              account: { update: jest.fn() },
-              organizationMembership: { create: jest.fn(), upsert: jest.fn(), update: jest.fn() },
-            })),
+            $transaction: jest.fn((fn: (tx: unknown) => unknown) =>
+              fn({
+                user: {
+                  create: jest.fn().mockResolvedValue(mockUser),
+                  update: jest.fn(),
+                  findUnique: jest.fn().mockResolvedValue(mockUser),
+                },
+                account: { update: jest.fn() },
+                organizationMembership: {
+                  create: jest.fn(),
+                  upsert: jest.fn(),
+                  update: jest.fn(),
+                },
+              }),
+            ),
           },
         },
         PaginationService,
@@ -154,7 +165,7 @@ describe('UsersService', () => {
       await service.create(createDto);
 
       expect(prisma.roles.findFirst).toHaveBeenCalledWith({
-        where: { name: 'other' },
+        where: { name: 'other', organizationId: null },
       });
     });
 
@@ -171,7 +182,9 @@ describe('UsersService', () => {
       const createDto = { name: 'New User', roleId: 'non-existent-uuid' };
       (prisma.roles.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(service.create(createDto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(createDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw NotFoundException when provided organizationId does not exist', async () => {
@@ -183,7 +196,9 @@ describe('UsersService', () => {
       (prisma.roles.findUnique as jest.Mock).mockResolvedValue(mockRole);
       (prisma.organization.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(service.create(createDto)).rejects.toThrow(NotFoundException);
+      await expect(service.create(createDto)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

@@ -15,3 +15,8 @@ export const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 export const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || '';
 export const FRONTEND_AUTH_CALLBACK_URL =
   process.env.FRONTEND_AUTH_CALLBACK_URL || '';
+
+export const SEED_ORG_ID = process.env.SEED_ORG_ID || '';
+export const SEED_USER_ID = process.env.SEED_USER_ID || '';
+export const SEED_ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || '';
+export const SEED_ADMIN_PASSWORD = process.env.SEED_ADMIN_PASSWORD || '';

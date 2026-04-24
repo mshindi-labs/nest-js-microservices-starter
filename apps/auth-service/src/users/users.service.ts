@@ -74,11 +74,11 @@ export class UsersService {
       let resolvedRoleId = dto.roleId;
       if (!resolvedRoleId) {
         const defaultRole = await this.prisma.roles.findFirst({
-          where: { name: 'other' },
+          where: { name: 'other', organizationId: null },
         });
         if (!defaultRole) {
           throw new BadRequestException(
-            'Default role "other" not found. Please specify a roleId.',
+            'Default system role "other" not found. Please specify a roleId.',
           );
         }
         resolvedRoleId = defaultRole.id;
@@ -87,7 +87,17 @@ export class UsersService {
           where: { id: resolvedRoleId },
         });
         if (!role) {
-          throw new NotFoundException(`Role with ID ${resolvedRoleId} not found`);
+          throw new NotFoundException(
+            `Role with ID ${resolvedRoleId} not found`,
+          );
+        }
+        if (
+          role.organizationId !== null &&
+          role.organizationId !== dto.organizationId
+        ) {
+          throw new BadRequestException(
+            'Role does not belong to the specified organization',
+          );
         }
       }
 
@@ -161,9 +171,21 @@ export class UsersService {
       const { email, msisdn, roleId, organizationId, ...userFields } = dto;
 
       if (roleId) {
-        const role = await this.prisma.roles.findUnique({ where: { id: roleId } });
+        const role = await this.prisma.roles.findUnique({
+          where: { id: roleId },
+        });
         if (!role) {
           throw new NotFoundException(`Role with ID ${roleId} not found`);
+        }
+        const targetOrgId =
+          organizationId ?? existingUser.memberships[0]?.organizationId ?? null;
+        if (
+          role.organizationId !== null &&
+          role.organizationId !== targetOrgId
+        ) {
+          throw new BadRequestException(
+            'Role does not belong to the target organization',
+          );
         }
       }
 
@@ -237,7 +259,12 @@ export class UsersService {
             null;
           if (targetOrgId) {
             await tx.organizationMembership.upsert({
-              where: { userId_organizationId: { userId: id, organizationId: targetOrgId } },
+              where: {
+                userId_organizationId: {
+                  userId: id,
+                  organizationId: targetOrgId,
+                },
+              },
               create: {
                 userId: id,
                 organizationId: targetOrgId,
@@ -294,7 +321,10 @@ export class UsersService {
 
       const msisdn = user.accounts.find((a) => a.msisdn)?.msisdn ?? null;
       const hasDefaultName = msisdn !== null && user.name === msisdn;
-      const hasDefaultRole = user.memberships[0]?.role?.name === 'other';
+      const activeMembership = user.memberships[0];
+      const hasDefaultRole =
+        activeMembership?.role?.name === 'other' &&
+        activeMembership?.role?.organizationId === null;
 
       return {
         isProfileComplete: !hasDefaultName && !hasDefaultRole,
