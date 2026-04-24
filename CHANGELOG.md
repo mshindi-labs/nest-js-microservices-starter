@@ -1,3 +1,13 @@
+## [1.1.0](https://github.com/mshindi-labs/nest-js-microservices-starter/compare/v1.0.0...v1.1.0) (2026-04-24)
+
+### Features
+
+- **roles:** add org-scoped roles domain with hybrid role model ([04b5f96](https://github.com/mshindi-labs/nest-js-microservices-starter/commit/04b5f965f0bb5d2f7143b706bc3a0fd14363d8ff))
+
+### Code Refactoring
+
+- rename project and update package metadata; adjust Prisma model mappings ([a1375bd](https://github.com/mshindi-labs/nest-js-microservices-starter/commit/a1375bdb530c65b961c2c30f6878d16c79ba27dd))
+
 ## 1.0.0 (2026-04-24)
 
 ### ⚠ BREAKING CHANGES
