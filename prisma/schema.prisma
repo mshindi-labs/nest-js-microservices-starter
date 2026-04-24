@@ -27,7 +27,7 @@ model Organization {
   createdAt   DateTime                 @default(now()) @map("created_at")
   updatedAt   DateTime                 @updatedAt @map("updated_at")
 
-  @@map("organizations")
+  @@map("auth_organizations")
 }
 
 // ─── Roles ────────────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ model User {
   createdAt   DateTime                 @default(now()) @map("created_at")
   updatedAt   DateTime                 @updatedAt @map("updated_at")
 
-  @@map("users")
+  @@map("auth_users")
 }
 
 // ─── Organization Memberships ─────────────────────────────────────────────────
@@ -98,7 +98,7 @@ model OrganizationMembership {
   @@index([userId])
   @@index([organizationId])
   @@index([roleId])
-  @@map("organization_memberships")
+  @@map("auth_organization_memberships")
 }
 
 // ─── Accounts ─────────────────────────────────────────────────────────────────
@@ -131,7 +131,7 @@ model Account {
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
 
-  @@map("accounts")
+  @@map("auth_accounts")
 }
 
 enum AccountType {
@@ -161,7 +161,7 @@ model OTP {
   @@index([accountId])
   @@index([accountId, type])
   @@index([expiresAt])
-  @@map("otp_codes")
+  @@map("auth_otp_codes")
 }
 
 enum OTPType {
@@ -211,7 +211,7 @@ model Invitation {
   @@index([email])
   @@index([token])
   @@index([status])
-  @@map("invitations")
+  @@map("auth_invitations")
 }
 
 // ─── Refresh Tokens ───────────────────────────────────────────────────────────
@@ -243,5 +243,5 @@ model RefreshToken {
   @@index([token])
   @@index([expiresAt])
   @@index([isRevoked])
-  @@map("refresh_tokens")
+  @@map("auth_refresh_tokens")
 }
