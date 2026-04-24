@@ -1,0 +1,44 @@
+{
+  "skill_name": "functional-typescript",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm getting weird bugs in our React app whenever we call this function. The cart sometimes gets corrupted when multiple components call it:\n\n```typescript\nfunction addItem(cart: CartItem[], item: CartItem): CartItem[] {\n  cart.push(item)\n  return cart\n}\n\nfunction applyDiscount(order: Order, percent: number): Order {\n  order.total = order.total * (1 - percent / 100)\n  return order\n}\n\nfunction sortByPrice(items: CartItem[]): CartItem[] {\n  return items.sort((a, b) => a.price - b.price)\n}\n```\n\nCan you explain what's wrong and refactor this to be safe?",
+      "expected_output": "Explanation of mutation bugs + refactored code using spread, Readonly<T> annotations, toSorted instead of sort, and return new arrays/objects",
+      "files": [],
+      "assertions": [
+        "Uses spread syntax ([...cart, item]) to avoid mutating the array argument",
+        "Annotates parameters with Readonly<T> or readonly CartItem[] in the refactored code",
+        "Replaces sort() with toSorted() or a non-mutating alternative",
+        "Uses spread to create a new object instead of mutating order.total directly",
+        "Explains WHY mutation causes bugs (shared reference / invisible coupling)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Our codebase uses fp-ts. I need to write a checkout function that:\n1. Fetches the user by ID\n2. Fetches their cart\n3. Validates the cart is non-empty\n4. Charges their saved payment method\n5. Returns a receipt or a typed error\n\nRight now I'm using async/await with try-catch but it's getting messy. Can you show me the fp-ts way?",
+      "expected_output": "fp-ts solution using TaskEither, pipe, TE.chain/bind, TE.filterOrElse, with typed error union and TE.fold at the edge",
+      "files": [],
+      "assertions": [
+        "Uses TaskEither (TE.TaskEither or TE.tryCatch) for async operations",
+        "Uses pipe() to compose the steps sequentially",
+        "Uses TE.chain or Do notation (TE.bind) to sequence dependent steps",
+        "Uses TE.filterOrElse or similar to validate the non-empty cart",
+        "Defines a typed error type (discriminated union or similar) rather than generic Error",
+        "Uses TE.fold or similar to handle the final result"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "I have this TypeScript code that registers click handlers for buttons, but they all show the same number (always 5):\n\n```typescript\nconst handlers = []\nfor (var i = 0; i < 5; i++) {\n  handlers.push(function() {\n    console.log('Button', i)\n  })\n}\n// All handlers log \"Button 5\"\n```\n\nWhat's happening and how do I fix it? I want each handler to log its own index.",
+      "expected_output": "Explanation of var hoisting / closure pitfall + fix using let, or better: array methods like Array.from or map with point-free style",
+      "files": [],
+      "assertions": [
+        "Correctly explains the var hoisting / shared closure pitfall (all closures share the same 'i' variable)",
+        "Offers fix using let instead of var",
+        "Offers a more functional solution using Array.from or map instead of the imperative loop",
+        "The functional solution avoids mutation (no push)"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,397 @@
+---
+alwaysApply: true
+---
+
+# NestJS Microservices — Cursor Rules
+
+**Stack**: NestJS 11.0.1 | PostgreSQL + Prisma 7.3.0 | Jest + Supertest | pnpm
+
+---
+
+## Project Overview
+
+This is a NestJS monorepo with a microservices architecture. HTTP traffic enters through `api-gateway` (port 9011), which validates requests and proxies them over TCP to `auth-service` (port 9012). Only `auth-service` touches the database.
+
+```
+nestjs-starter/
+├── apps/
+│   ├── api-gateway/     # HTTP server (port 9011) — thin proxy, guards, Swagger
+│   └── auth-service/    # TCP microservice (port 9012) — Auth + Users domains
+├── libs/
+│   ├── common/          # @app/common — pipes, filters, decorators, DTOs, utils
+│   ├── prisma/          # @app/prisma — PrismaModule, PrismaService
+│   └── contracts/       # @app/contracts — message patterns + payload interfaces
+└── prisma/              # Shared Prisma schema
+```
+
+**Request flow:**
+```
+Client → HTTP → api-gateway (ApiKeyGuard → JwtAuthGuard → RolesGuard) → TCP → auth-service → PostgreSQL
+```
+
+**Port allocation**: api-gateway=9011 (HTTP), auth-service=9012 (TCP). Future services increment from 9013.
+
+---
+
+## Core Architecture Rules
+
+### Service Boundaries
+
+- `api-gateway` is an HTTP proxy. It has no database access and no business logic.
+- `auth-service` owns all business logic, validation, and data persistence.
+- `@app/prisma` is only imported in `apps/auth-service/src/app.module.ts`. Never in the gateway.
+- Shared code always goes in `libs/`. Never duplicate utilities across apps.
+
+### Layer Separation
+
+| Layer | Lives In | Responsibility |
+|---|---|---|
+| Gateway Controller | `apps/api-gateway/src/<feature>/` | HTTP routing, extract from request, `ClientProxy.send()` |
+| Auth-service Controller | `apps/auth-service/src/<feature>/` | `@MessagePattern` handlers, delegate to service |
+| Service | `apps/auth-service/src/<feature>/` | Business logic, validation, throw HTTP exceptions |
+| Repository | `apps/auth-service/src/<feature>/` | Prisma queries only — no logic |
+| Contracts | `libs/contracts/src/` | Patterns, payloads — shared between gateway and auth-service |
+
+### TCP Communication Pattern
+
+Gateway sends a message with `ClientProxy.send(PATTERN, payload)` and awaits the response with `firstValueFrom()`. Auth-service handles it with `@MessagePattern(PATTERN)`.
+
+```typescript
+// Gateway controller (HTTP proxy — no business logic)
+@Get('me')
+getCurrentUser(@User() user: AuthorizedUser): Promise<CurrentUserResponseDto> {
+  return firstValueFrom(
+    this.authClient.send(AUTH_PATTERNS.ME, { context: user }),
+  );
+}
+
+// Auth-service controller (TCP handler — delegates to service)
+@MessagePattern(AUTH_PATTERNS.ME)
+getMe(@Payload() { context }: { context: AuthContext }): Promise<CurrentUserResponseDto> {
+  return this.authService.getMe(context.accountId);
+}
+```
+
+### `MicroservicesClientModule` — Global Client DI
+
+`AUTH_SERVICE` `ClientProxy` is registered once in `apps/api-gateway/src/microservices-client.module.ts` using `@Global()`. All gateway feature modules inject `@Inject(AUTH_SERVICE) authClient: ClientProxy` without importing `ClientsModule` themselves.
+
+When adding a new microservice, add its client to `MicroservicesClientModule` — **never** register `ClientsModule` inside a feature module.
+
+### JWT — Self-Contained Payload (No TCP Hop Per Request)
+
+JWT tokens embed `name`, `roleId`, `roleName`, and `organizationId` at sign-in time. The gateway's `JwtStrategy` validates tokens locally — no TCP call to auth-service on every request. When updating `auth.service.ts` signing logic, always include all user context fields in the payload.
+
+### Error Propagation Across TCP
+
+Auth-service services throw NestJS HTTP exceptions (`NotFoundException`, `ConflictException`, etc.). These are serialized as `RpcException` over TCP. The gateway's global `RpcExceptionFilter` (`libs/common/src/filters/rpc-exception.filter.ts`) unwraps them back to HTTP responses with the correct status code. Never throw `RpcException` directly from services.
+
+---
+
+## `@app/contracts` — Always Define First
+
+Before touching either service, define the contract in `libs/contracts/src/`:
+
+```typescript
+// libs/contracts/src/auth/auth.patterns.ts
+export const AUTH_PATTERNS = {
+  NEW_ACTION: 'auth.newAction',
+} as const;
+
+// libs/contracts/src/auth/auth.payloads.ts
+export interface NewActionPayload {
+  readonly field: string;
+}
+```
+
+Multi-file edit order:
+1. `prisma/schema.prisma` (if DB change)
+2. `libs/contracts/src/` — patterns + payload interfaces
+3. `apps/auth-service/src/<feature>/dto/` — DTOs
+4. `apps/auth-service/src/<feature>/<feature>.repository.ts`
+5. `apps/auth-service/src/<feature>/<feature>.service.ts`
+6. `apps/auth-service/src/<feature>/<feature>.controller.ts` (`@MessagePattern`)
+7. `apps/api-gateway/src/<feature>/<feature>.controller.ts` (`ClientProxy.send`)
+8. Tests
+
+---
+
+## Guard and Access Design
+
+Decorators are applied at the **gateway controller** level only:
+
+| Scenario | Decorator | Effect |
+|---|---|---|
+| Fully public (OAuth, health) | `@Open()` | Skips API key AND JWT |
+| Unauthenticated but API-key-gated | `@Public()` | Skips JWT; API key required |
+| Requires logged-in user | *(no decorator)* | Full guard stack |
+| Role-restricted | `@Roles('admin')` | JWT + role check |
+
+Never put `@Open()` on business endpoints. Use `@Public()` for signup/login flows.
+
+---
+
+## Functional Programming (Mandatory)
+
+- **Immutability First:** No `let`, no mutation. Use `Readonly<T>`, `ReadonlyArray<T>`.
+- **Pure Functions:** Extract pure business logic out of service methods where possible.
+- **Function Composition:** Use HOFs, closures, and partial application for reusable logic.
+- **Explicit States:** Use discriminated unions (`Result<T, E>`, `Option<T>`) for branching states.
+- **Exhaustive Handling:** Use `switch` with exhaustiveness checks over discriminated unions.
+
+---
+
+## TypeScript Standards
+
+- Strict mode on (`nodenext` module resolution, `isolatedModules: true`).
+- Explicit types on all variables, parameters, and return values.
+- No `any` type.
+- `interface` for object definitions; `type` for aliases and unions.
+- `import type` where possible.
+- Enums for fixed value sets.
+
+---
+
+## Naming Conventions
+
+- Files/directories: `kebab-case`
+- Classes, interfaces, enums: `PascalCase`
+- Variables, methods: `camelCase`
+- Constants: `SCREAMING_SNAKE_CASE`
+- Function names start with verbs: `findById`, `createUser`, `deleteSession`
+
+---
+
+## DTO & Validation Rules
+
+- One DTO per operation: `CreateXxxDto`, `UpdateXxxDto`, `XxxResponseDto`.
+- Use `PartialType(CreateXxxDto)` for update DTOs.
+- Annotate with `class-validator` decorators.
+- Use `@Transform` for normalization (e.g., lowercasing emails).
+- Validate **only at the HTTP boundary** (gateway controller). Auth-service controllers trust pre-validated input.
+- Global `ValidationPipe` is in api-gateway only.
+
+---
+
+## Database & Prisma
+
+- UUID primary keys: `@id @default(uuid())`.
+- Audit fields on all models: `created_by`, `updated_by`, `created_at`, `updated_at`.
+- Use `prisma.$transaction()` for atomically related writes.
+- Generated client at `generated/prisma/` — import from `generated/prisma/client`.
+- `PrismaService` is only available in auth-service (via `@app/prisma`).
+
+Schema change workflow:
+1. Edit `prisma/schema.prisma`
+2. `pnpm prisma migrate dev --name <description>`
+3. `pnpm prisma generate`
+4. Update DTOs, repositories, and service logic
+5. Update tests — never commit a schema change without its migration
+
+---
+
+## Testing Patterns
+
+### Auth-service unit test — mock repository
+```typescript
+describe('UsersService', () => {
+  let service: UsersService;
+  let repository: jest.Mocked<UsersRepository>;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        UsersService,
+        { provide: UsersRepository, useValue: { findById: jest.fn() } },
+      ],
+    }).compile();
+    service = module.get(UsersService);
+    repository = module.get(UsersRepository);
+  });
+
+  it('should throw NotFoundException when user not found', async () => {
+    repository.findById.mockResolvedValue(null); // Arrange
+    await expect(service.findById('1')).rejects.toThrow(NotFoundException); // Act + Assert
+  });
+});
+```
+
+### Gateway unit test — mock ClientProxy
+```typescript
+import { of } from 'rxjs';
+
+describe('AuthController (gateway)', () => {
+  let controller: AuthController;
+  let authClient: { send: jest.Mock };
+
+  beforeEach(async () => {
+    authClient = { send: jest.fn().mockReturnValue(of(mockAuthResponse)) };
+    const module = await Test.createTestingModule({
+      controllers: [AuthController],
+      providers: [{ provide: AUTH_SERVICE, useValue: authClient }],
+    }).compile();
+    controller = module.get(AuthController);
+  });
+
+  it('should send SIGNUP pattern with dto payload', async () => {
+    const result = await controller.signup(mockSignupDto); // Act
+    expect(authClient.send).toHaveBeenCalledWith(AUTH_PATTERNS.SIGNUP, mockSignupDto);
+    expect(result).toEqual(mockAuthResponse);
+  });
+});
+```
+
+---
+
+## Code Templates
+
+### Gateway Controller
+```typescript
+@Controller('auth')
+export class AuthController {
+  constructor(
+    @Inject(AUTH_SERVICE) private readonly authClient: ClientProxy,
+  ) {}
+
+  @Public()
+  @Post('login')
+  login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
+    return firstValueFrom(this.authClient.send(AUTH_PATTERNS.LOGIN, dto));
+  }
+
+  @Get('me')
+  getMe(@User() user: AuthorizedUser): Promise<CurrentUserResponseDto> {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.ME, { context: user }),
+    );
+  }
+}
+```
+
+### Auth-service Controller
+```typescript
+@Controller()
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  @MessagePattern(AUTH_PATTERNS.LOGIN)
+  login(@Payload() dto: LoginDto): Promise<AuthResponseDto> {
+    return this.authService.login(dto);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.ME)
+  getMe(@Payload() { context }: { context: AuthContext }): Promise<CurrentUserResponseDto> {
+    return this.authService.getMe(context.accountId);
+  }
+}
+```
+
+### Service
+```typescript
+@Injectable()
+export class AuthService {
+  constructor(private readonly repository: AuthRepository) {}
+
+  async login(dto: LoginDto): Promise<AuthResponseDto> {
+    const account = await this.repository.findByEmail(dto.email);
+    if (!account) throw new UnauthorizedException('Invalid credentials');
+    const valid = await bcrypt.compare(dto.password, account.passwordHash);
+    if (!valid) throw new UnauthorizedException('Invalid credentials');
+    return this.buildAuthResponse(account);
+  }
+}
+```
+
+### Repository
+```typescript
+@Injectable()
+export class AuthRepository {
+  constructor(private readonly prisma: PrismaService) {}
+
+  async findByEmail(email: string): Promise<Account | null> {
+    return this.prisma.account.findUnique({
+      where: { email },
+      include: { user: { include: { role: true } } },
+    });
+  }
+}
+```
+
+---
+
+## Quick Commands
+
+```bash
+# Development — start auth-service first, then gateway
+pnpm start:auth          # TCP microservice on port 9012
+pnpm start:gateway       # HTTP server on port 9011
+
+# Build
+pnpm build:auth
+pnpm build:gateway
+
+# Testing
+pnpm test                # All unit tests
+pnpm test:e2e            # E2E tests
+pnpm test:cov            # Coverage
+
+# Database
+pnpm prisma migrate dev  # Create and apply migration
+pnpm prisma generate     # Regenerate Prisma client
+pnpm prisma studio       # Database GUI
+
+# Code quality
+pnpm lint
+pnpm format
+```
+
+---
+
+## 🧠 Procedural Knowledge & `@skills` Integration
+
+This repository leverages the **`@skills` directory** (located in `.agents/skills/`) as the source of truth for programmatic standards.
+
+> **MANDATORY**: Read the relevant skill file *before* generating or refactoring code. Do not hallucinate patterns.
+
+| Skill | Path | When to consult |
+|---|---|---|
+| **Functional TypeScript** | `.agents/skills/functional-typescript/SKILL.md` | **Mandatory default.** HOFs, currying, pure functions, closures. |
+| **TypeScript Best Practices** | `.agents/skills/typescript-best-practices/SKILL.md` | Discriminated unions, illegal-state prevention, runtime validation. |
+| **TypeScript Expert** | `.agents/skills/typescript-expert/SKILL.md` | Advanced typing, optimizations, language tooling. |
+| **NestJS Best Practices** | `.agents/skills/nestjs-best-practices/SKILL.md` | Architecture, DI, module patterns. |
+| **NestJS Expert** | `.agents/skills/nestjs-expert/SKILL.md` | Microservices, TCP, `@MessagePattern`, `ClientProxy`, `RpcException`. |
+| **Testing with Jest** | `.agents/skills/javascript-typescript-jest/SKILL.md` | AAA pattern, mocking `ClientProxy`, testing pure functions. |
+| **Architecture Modules** `arch-*` | `.agents/skills/nestjs-best-practices/rules/arch-*.md` | Module restructuring, `@Global()` pattern, repository patterns. |
+| **Dependency Injection** `di-*` | `.agents/skills/nestjs-best-practices/rules/di-*.md` | `@Inject()` tokens, `@Global()` scope, provider scopes. |
+| **Error Handling** `error-*` | `.agents/skills/nestjs-best-practices/rules/error-*.md` | `RpcExceptionFilter`, TCP error propagation, HTTP exceptions from services. |
+| **Security Standards** `security-*` | `.agents/skills/nestjs-best-practices/rules/security-*.md` | JWT self-contained payload, guard ordering, API key patterns. |
+| **Performance Patterns** `perf-*` | `.agents/skills/nestjs-best-practices/rules/perf-*.md` | DB indexing, caching strategies. |
+
+### How to apply skill rules
+1. Identify the task category (architecture → `arch-*`, auth → `security-*`, etc.)
+2. Open the matching rule file — read the _incorrect_ example first
+3. Generate code matching the _correct_ example, adapting to project-specific patterns
+4. CRITICAL rules must never be violated; HIGH rules require justification if deviated from
+
+---
+
+## 🎯 Checklist
+
+When generating or reviewing code:
+
+- [ ] Feature-led structure (`apps/<service>/src/<feature>/`)
+- [ ] Patterns/payloads added to `libs/contracts/` before any service code
+- [ ] Gateway controller: `ClientProxy.send()` only — zero business logic
+- [ ] Auth-service controller: `@MessagePattern` only — delegates to service
+- [ ] `AUTH_SERVICE` injected via `@Inject(AUTH_SERVICE)` — not imported from feature modules
+- [ ] New microservice clients go in `MicroservicesClientModule`, not feature modules
+- [ ] `@app/prisma` used only in `auth-service/src/app.module.ts`
+- [ ] All 7 naming principles followed
+- [ ] Explicit return types — no implicit `any`
+- [ ] Functional programming enforced (immutability, pure functions)
+- [ ] DTOs validated at gateway boundary only
+- [ ] Controller → Service → Repository layering respected
+- [ ] Gateway tests mock `ClientProxy` (not services)
+- [ ] Auth-service tests mock repositories (not Prisma directly)
+- [ ] AAA test structure used
+- [ ] Relevant skill files consulted

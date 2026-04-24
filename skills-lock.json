@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "skills": {
+    "Function Composition - Building from Small Pieces": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "efbd7c31b2fa687b011655a0b7d86e90a69e3c11576a4f441898992a4501208d"
+    },
+    "Functional Programming Fundamentals": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "0da195e3bce1fe6b115b5b114eea8c564e1b652d5d32f2c1175a32ad97d9a2ee"
+    },
+    "Functional Programming in React": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "b47da0790aea28f954539c617f95a990f0569b582d9d7be5dcd7203721b3a020"
+    },
+    "Managing Side Effects Functionally": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "e96917143450f453017b0f2a6a1f219495a21602e6b4f1516ba08fa6a307d813"
+    },
+    "Practical Data Transformations": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "e0c01fbf374e3e9f97753b6963170d26fffa759829404a09a46f4edd653ae72b"
+    },
+    "Practical Error Handling with fp-ts": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "dee0e61ce3c1c5b36063bdbfbca72f79be0428c3f98bedad82d25827cd209d46"
+    },
+    "Pragmatic Functional Programming": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "87954ecd16fc0afe6de13ac6837d0dfa556ce9718498919fe23b65b236f22d0d"
+    },
+    "find-skills": {
+      "source": "vercel-labs/skills",
+      "sourceType": "github",
+      "computedHash": "d31e234f0c90694a670222cdd1dafa853e051d7066beda389f1097c22dadd461"
+    },
+    "fp-immutable": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "5faaffb2ac3d3709a0530ef5509c951febc1c320eb63db06957b23ca333e1afe"
+    },
+    "fp-refactor": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "6d2642daa436090ab0a5af8f9a5400e0d2f2fcd22e4a8d012f8f3761b99607c7"
+    },
+    "fp-ts Algebraic Data Types and Type Classes": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "822e33590d06be1e6a5c73868a693ccf5b6795f2fd100d4b7f69d203fbf605b6"
+    },
+    "fp-ts Do Notation": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "e68404c823fc923d53fe9598182a863b6de67087f7c2ca5be505039fe45405ae"
+    },
+    "fp-ts Option and Either": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "90ecbef589f5ddc9ecfc095d3b56e341e8e57169c05de9188fb5f28cb19e4965"
+    },
+    "fp-ts Pipe and Flow Composition": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "ede883f424ef1ed26191165c542f80ca34cc91ba543abdc5cce9901b16f50c9c"
+    },
+    "fp-ts-async-practical": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "980b9b71fa7104eff45dae8ce9a1c1c360b368e9fc7a1f668d8443cf227423f0"
+    },
+    "fp-ts-backend": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "5a5ef8b5a7b3d4f85701861af9b1763de780ff62bdf2be09c5a9587485121370"
+    },
+    "fp-ts-task-either": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "12ba521b996dac9646a1d54fe239723f926d6887d6b5da528fa9e3d3fbf56b61"
+    },
+    "fp-ts-validation": {
+      "source": "whatiskadudoing/fp-ts-skills",
+      "sourceType": "github",
+      "computedHash": "597a8004035c4281dc85e528c5ce67b216fee2be871cf6f1d6faba1f54b081a9"
+    },
+    "functional-typescript": {
+      "source": "mshindi-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "c7e408baa0b00913433ed82fe3a3de01fe183c54b6c52997d7c75bb0e58a4b16"
+    },
+    "javascript-typescript-jest": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "0073d19ab0275eb6a8200aced6789a53744667bd717b5d1f44ce708a1740e5d4"
+    },
+    "nestjs-best-practices": {
+      "source": "kadajett/agent-nestjs-skills",
+      "sourceType": "github",
+      "computedHash": "1b6f82e889d19d305e38e35594de08eca0242321f353cafa4cf5e61dd3aa1a73"
+    },
+    "nestjs-expert": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "db72897ee0ae63aebce4a4e23cc5f81f919137907052127f0169bc379d6194b1"
+    },
+    "typescript-best-practices": {
+      "source": "0xbigboss/claude-code",
+      "sourceType": "github",
+      "computedHash": "838d6737e59e8b15457a6af23112bc3a107a8ac098606a19a43c2be0db2dbe5a"
+    },
+    "typescript-expert": {
+      "source": "sickn33/antigravity-awesome-skills",
+      "sourceType": "github",
+      "computedHash": "f0f625132cf53116cb27725926e2c99f142861b9063d459938dd85fbf8e2bf61"
+    }
+  }
+}

@@ -1,0 +1,120 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider   = "prisma-client"
+  output     = "../generated/prisma"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Organization {
+  id          Int      @id @default(autoincrement()) @db.Integer
+  name        String
+  description String?
+  logo        String?
+  website     String?
+  isActive    Boolean  @default(true) @map("is_active")
+  users       User[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("organizations")
+}
+
+model Roles {
+  id        Int      @id @default(autoincrement()) @db.Integer
+  name      String   @unique
+  users     User[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model User {
+  id             Int           @id @default(autoincrement()) @db.Integer
+  name           String
+  avatar         String?
+  roleId         Int           @map("role_id")
+  role           Roles         @relation(fields: [roleId], references: [id])
+  organizationId Int?          @map("organization_id")
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  accounts       Account[]
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Account {
+  id                  String         @id @default(uuid())
+  userId              Int            @map("user_id")
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  email               String?        @unique
+  msisdn              String?        @unique
+  password            String?
+  accountType         AccountType    @map("account_type")
+  googleId            String?        @unique @map("google_id")
+  isEmailVerified     Boolean        @default(false) @map("is_email_verified")
+  isMsisdnVerified    Boolean        @default(false) @map("is_msisdn_verified")
+  isActive            Boolean        @default(true) @map("is_active")
+  failedLoginAttempts Int            @default(0) @map("failed_login_attempts")
+  lockedUntil         DateTime?      @map("locked_until")
+  otps                OTP[]
+  refreshTokens       RefreshToken[]
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  @@map("accounts")
+}
+
+enum AccountType {
+  EMAIL
+  MSISDN
+  GOOGLE
+}
+
+model OTP {
+  id        String   @id @default(uuid())
+  accountId String   @map("account_id")
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  code      String
+  type      OTPType
+  expiresAt DateTime @map("expires_at")
+  isUsed    Boolean  @default(false) @map("is_used")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([accountId])
+  @@index([accountId, type])
+  @@index([expiresAt])
+  @@map("otp_codes")
+}
+
+enum OTPType {
+  EMAIL_VERIFICATION
+  MSISDN_VERIFICATION
+  LOGIN
+  PASSWORD_RESET
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  accountId String   @map("account_id")
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  isRevoked Boolean  @default(false) @map("is_revoked")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([accountId])
+  @@index([token])
+  @@index([expiresAt])
+  @@index([isRevoked])
+  @@map("refresh_tokens")
+}
