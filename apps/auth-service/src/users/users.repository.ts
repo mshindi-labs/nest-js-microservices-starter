@@ -2,14 +2,21 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '@app/prisma';
 import { Prisma } from 'generated/prisma/client';
 import { User } from 'generated/prisma/client';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
 import { raiseHttpError } from '@app/common/utils/raise-http-error';
 
 export interface UsersFindAllFilters {
-  roleId?: number;
+  roleId?: string;
   search?: string;
 }
+
+const USER_WITH_MEMBERSHIPS_INCLUDE = {
+  memberships: {
+    where: { deletedAt: null, isActive: true },
+    include: { role: true, organization: true },
+    orderBy: { joinedAt: 'asc' as const },
+  },
+  accounts: true,
+} as const;
 
 @Injectable()
 export class UsersRepository {
@@ -18,10 +25,16 @@ export class UsersRepository {
   private buildWhereClause(
     filters?: UsersFindAllFilters,
   ): Prisma.UserWhereInput {
-    const where: Prisma.UserWhereInput = {};
+    const where: Prisma.UserWhereInput = { deletedAt: null };
 
     if (filters?.roleId) {
-      where.roleId = filters.roleId;
+      where.memberships = {
+        some: {
+          roleId: filters.roleId,
+          deletedAt: null,
+          isActive: true,
+        },
+      };
     }
 
     if (filters?.search?.trim()) {
@@ -41,7 +54,7 @@ export class UsersRepository {
       ];
     }
 
-    return Object.keys(where).length > 0 ? where : {};
+    return where;
   }
 
   async findAll(
@@ -52,76 +65,87 @@ export class UsersRepository {
     try {
       const where = this.buildWhereClause(filters);
       return await this.prisma.user.findMany({
-        where: Object.keys(where).length > 0 ? where : undefined,
+        where,
         skip,
         take,
         orderBy: { createdAt: 'desc' },
-        include: { role: true, accounts: true, organization: true },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
     } catch (error) {
       raiseHttpError(error as unknown);
     }
   }
 
-  async findById(id: number): Promise<User | null> {
+  async findById(id: string): Promise<User | null> {
     try {
       return await this.prisma.user.findUnique({
-        where: { id },
-        include: { role: true, accounts: true, organization: true },
+        where: { id, deletedAt: null },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
     } catch (error) {
       raiseHttpError(error as unknown);
     }
   }
 
-  async findByRoleId(roleId: number): Promise<User[]> {
+  async findByRoleId(roleId: string): Promise<User[]> {
     try {
       return await this.prisma.user.findMany({
-        where: { roleId },
-        include: { role: true, accounts: true, organization: true },
+        where: {
+          deletedAt: null,
+          memberships: { some: { roleId, deletedAt: null, isActive: true } },
+        },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
     } catch (error) {
       raiseHttpError(error as unknown);
     }
   }
 
-  async findByOrganizationId(organizationId: number): Promise<User[]> {
+  async findByOrganizationId(organizationId: string): Promise<User[]> {
     try {
       return await this.prisma.user.findMany({
-        where: { organizationId },
-        include: { role: true, accounts: true, organization: true },
+        where: {
+          deletedAt: null,
+          memberships: {
+            some: { organizationId, deletedAt: null, isActive: true },
+          },
+        },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
     } catch (error) {
       raiseHttpError(error as unknown);
     }
   }
 
-  async create(data: CreateUserDto & { roleId: number }): Promise<User> {
+  async create(data: { name: string; avatar?: string | null }): Promise<User> {
     try {
       return await this.prisma.user.create({
         data,
-        include: { role: true, organization: true },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
     } catch (error) {
       raiseHttpError(error as unknown);
     }
   }
 
-  async update(id: number, data: UpdateUserDto): Promise<User> {
+  async update(id: string, data: Prisma.UserUpdateInput): Promise<User> {
     try {
       return await this.prisma.user.update({
-        where: { id },
+        where: { id, deletedAt: null },
         data,
-        include: { role: true, accounts: true, organization: true },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
     } catch (error) {
       raiseHttpError(error as unknown);
     }
   }
 
-  async delete(id: number): Promise<void> {
+  async delete(id: string): Promise<void> {
     try {
-      await this.prisma.user.delete({ where: { id } });
+      await this.prisma.user.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      });
     } catch (error) {
       raiseHttpError(error as unknown);
     }
@@ -130,9 +154,7 @@ export class UsersRepository {
   async count(filters?: UsersFindAllFilters): Promise<number> {
     try {
       const where = this.buildWhereClause(filters);
-      return await this.prisma.user.count({
-        where: Object.keys(where).length > 0 ? where : undefined,
-      });
+      return await this.prisma.user.count({ where });
     } catch (error) {
       raiseHttpError(error as unknown);
     }

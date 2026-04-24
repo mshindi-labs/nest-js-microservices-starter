@@ -1,24 +1,17 @@
-import { IsInt, IsOptional, IsString, Min } from 'class-validator';
-import { Type, Transform } from 'class-transformer';
+import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { Transform } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { PaginationQueryDto } from '@app/common/dto/pagination-query.dto';
 
 export class UsersQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
-    description: 'Filter users by role ID',
-    example: 1,
-    type: Number,
+    description: 'Filter users by role UUID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
+    type: String,
   })
   @IsOptional()
-  @Type(() => Number)
-  @Transform(({ value }) =>
-    value !== undefined && value !== null && value !== ''
-      ? Number(value)
-      : undefined,
-  )
-  @IsInt({ message: 'role_id must be an integer' })
-  @Min(1, { message: 'role_id must be at least 1' })
-  role_id?: number;
+  @IsUUID()
+  role_id?: string;
 
   @ApiPropertyOptional({
     description: 'Search by name, email, or phone number',

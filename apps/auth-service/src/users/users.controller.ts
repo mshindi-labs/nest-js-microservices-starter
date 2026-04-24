@@ -9,6 +9,8 @@ import type {
   CreateUserPayload,
   UpdateUserPayload,
   DeleteUserPayload,
+  GetMembershipsPayload,
+  RemoveFromOrgPayload,
 } from '@app/contracts/users/users.payloads';
 
 @Controller()
@@ -58,5 +60,18 @@ export class UsersController {
   @MessagePattern(USERS_PATTERNS.DELETE)
   remove(@Payload() payload: DeleteUserPayload) {
     return this.usersService.remove(payload.id);
+  }
+
+  @MessagePattern(USERS_PATTERNS.GET_MEMBERSHIPS)
+  getMemberships(@Payload() payload: GetMembershipsPayload) {
+    return this.usersService.getUserMemberships(payload.userId);
+  }
+
+  @MessagePattern(USERS_PATTERNS.REMOVE_FROM_ORG)
+  removeFromOrganization(@Payload() payload: RemoveFromOrgPayload) {
+    return this.usersService.removeFromOrganization(
+      payload.userId,
+      payload.organizationId,
+    );
   }
 }

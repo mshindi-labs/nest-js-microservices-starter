@@ -1,8 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
   provider   = "prisma-client"
   output     = "../generated/prisma"
@@ -13,50 +8,112 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── Organizations ────────────────────────────────────────────────────────────
+
+// Soft-deleted organizations are kept for audit trails and FK integrity.
+// Hard-deleting would orphan historical membership/invitation records.
 model Organization {
-  id          Int      @id @default(autoincrement()) @db.Integer
+  id          String                   @id @default(uuid())
   name        String
   description String?
   logo        String?
   website     String?
-  isActive    Boolean  @default(true) @map("is_active")
-  users       User[]
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  isActive    Boolean                  @default(true) @map("is_active")
+  members     OrganizationMembership[]
+  invitations Invitation[]
+  deletedAt   DateTime?                @map("deleted_at")
+  createdBy   String?                  @map("created_by")
+  updatedBy   String?                  @map("updated_by")
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  updatedAt   DateTime                 @updatedAt @map("updated_at")
 
   @@map("organizations")
 }
 
+// ─── Roles ────────────────────────────────────────────────────────────────────
+
+// Roles are global; the role-in-org pairing lives on OrganizationMembership.
+// A user can hold different roles across different organizations.
 model Roles {
-  id        Int      @id @default(autoincrement()) @db.Integer
-  name      String   @unique
-  users     User[]
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id          String                   @id @default(uuid())
+  name        String                   @unique
+  members     OrganizationMembership[]
+  invitations Invitation[]
+  createdBy   String?                  @map("created_by")
+  updatedBy   String?                  @map("updated_by")
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  updatedAt   DateTime                 @updatedAt @map("updated_at")
 
   @@map("roles")
 }
 
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+// A User is the identity record (who you are).
+// An Account is the credential record (how you authenticate).
+// One user can have multiple accounts (email + msisdn + Google).
 model User {
-  id             Int           @id @default(autoincrement()) @db.Integer
-  name           String
-  avatar         String?
-  roleId         Int           @map("role_id")
-  role           Roles         @relation(fields: [roleId], references: [id])
-  organizationId Int?          @map("organization_id")
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  accounts       Account[]
-  createdAt      DateTime      @default(now()) @map("created_at")
-  updatedAt      DateTime      @updatedAt @map("updated_at")
+  id          String                   @id @default(uuid())
+  name        String
+  avatar      String?
+  memberships OrganizationMembership[]
+  accounts    Account[]
+  deletedAt   DateTime?                @map("deleted_at")
+  createdBy   String?                  @map("created_by")
+  updatedBy   String?                  @map("updated_by")
+  createdAt   DateTime                 @default(now()) @map("created_at")
+  updatedAt   DateTime                 @updatedAt @map("updated_at")
 
   @@map("users")
 }
 
+// ─── Organization Memberships ─────────────────────────────────────────────────
+
+// Join table that grants a user a role within a specific organization.
+// onDelete: Restrict prevents orphaned memberships if a user or org is deleted
+// without explicitly removing members first — forces intentional cleanup.
+// Soft-deletes (deletedAt) preserve audit history of past memberships.
+// @@unique([userId, organizationId]) enforces one active slot per user per org;
+// a user can be re-invited after soft-deletion because the unique constraint
+// is on the row, and a new row is created for re-joins.
+model OrganizationMembership {
+  id             String       @id @default(uuid())
+  userId         String       @map("user_id")
+  user           User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  organizationId String       @map("organization_id")
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  roleId         String       @map("role_id")
+  role           Roles        @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  isActive       Boolean      @default(true) @map("is_active")
+  // Plain string, not a FK — the inviter may be deactivated/deleted later.
+  invitedBy      String?      @map("invited_by")
+  joinedAt       DateTime     @default(now()) @map("joined_at")
+  deletedAt      DateTime?    @map("deleted_at")
+  createdBy      String?      @map("created_by")
+  updatedBy      String?      @map("updated_by")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+
+  @@unique([userId, organizationId])
+  @@index([userId])
+  @@index([organizationId])
+  @@index([roleId])
+  @@map("organization_memberships")
+}
+
+// ─── Accounts ─────────────────────────────────────────────────────────────────
+
+// Cascade on user delete — accounts are meaningless without a user and contain
+// PII (email, msisdn) that must be purged together.
+// failedLoginAttempts + lockedUntil implement a timed lockout after
+// MAX_LOGIN_ATTEMPTS consecutive failures (see auth-constants.ts).
+// lastLoginAt tracks genuine logins only; token refreshes do not update it.
 model Account {
   id                  String         @id @default(uuid())
-  userId              Int            @map("user_id")
+  userId              String         @map("user_id")
   user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   email               String?        @unique
+  // msisdn = Mobile Station Integrated Services Digital Network Number (E.164 format)
   msisdn              String?        @unique
   password            String?
   accountType         AccountType    @map("account_type")
@@ -66,8 +123,11 @@ model Account {
   isActive            Boolean        @default(true) @map("is_active")
   failedLoginAttempts Int            @default(0) @map("failed_login_attempts")
   lockedUntil         DateTime?      @map("locked_until")
+  lastLoginAt         DateTime?      @map("last_login_at")
   otps                OTP[]
   refreshTokens       RefreshToken[]
+  createdBy           String?        @map("created_by")
+  updatedBy           String?        @map("updated_by")
   createdAt           DateTime       @default(now()) @map("created_at")
   updatedAt           DateTime       @updatedAt @map("updated_at")
 
@@ -80,6 +140,13 @@ enum AccountType {
   GOOGLE
 }
 
+// ─── OTPs ─────────────────────────────────────────────────────────────────────
+
+// OTP codes are bcrypt-hashed before storage — never stored in plain text.
+// Lookup requires fetching all valid OTPs for the account+type and running
+// bcrypt.compare in a loop. To keep this O(1), callers must call
+// invalidateAllByAccountAndType before creating a new OTP (at most 1 valid).
+// Composite index on (accountId, type) covers the most frequent query shape.
 model OTP {
   id        String   @id @default(uuid())
   accountId String   @map("account_id")
@@ -88,6 +155,7 @@ model OTP {
   type      OTPType
   expiresAt DateTime @map("expires_at")
   isUsed    Boolean  @default(false) @map("is_used")
+  createdBy String?  @map("created_by")
   createdAt DateTime @default(now()) @map("created_at")
 
   @@index([accountId])
@@ -103,14 +171,73 @@ enum OTPType {
   PASSWORD_RESET
 }
 
+// ─── Invitations ──────────────────────────────────────────────────────────────
+
+// @@unique([email, organizationId, status]) allows re-inviting the same email
+// to the same org after they decline or after an old invite expires, because
+// those rows have a different status value. It only blocks a second PENDING
+// invite to the same email+org pair.
+// token is a separate UUID (not the row id) so it can be rotated without
+// changing the primary key if we ever need to re-send.
+// invitedBy / acceptedBy are plain strings (not FK relations) so that
+// deactivating the inviter does not affect the invitation record.
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  EXPIRED
+}
+
+model Invitation {
+  id             String           @id @default(uuid())
+  organizationId String           @map("organization_id")
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  roleId         String           @map("role_id")
+  role           Roles            @relation(fields: [roleId], references: [id])
+  token          String           @unique @default(uuid())
+  status         InvitationStatus @default(PENDING)
+  expiresAt      DateTime         @map("expires_at")
+  invitedBy      String           @map("invited_by")
+  acceptedBy     String?          @map("accepted_by")
+  acceptedAt     DateTime?        @map("accepted_at")
+  createdBy      String?          @map("created_by")
+  updatedBy      String?          @map("updated_by")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  @@unique([email, organizationId, status])
+  @@index([organizationId])
+  @@index([email])
+  @@index([token])
+  @@index([status])
+  @@map("invitations")
+}
+
+// ─── Refresh Tokens ───────────────────────────────────────────────────────────
+
+// Tokens are rotated on every use — each refresh issues a new token and
+// revokes the previous one. isRevoked is set rather than deleting rows so
+// that concurrent refresh race conditions surface a revocation signal
+// (see refresh token rotation in auth.service.ts).
+// Session metadata (userAgent, ipAddress, deviceName) is populated at
+// token creation time and used by the session management endpoints.
+// lastUsedAt is updated on each successful refresh — NOT on login — to
+// distinguish active sessions from stale ones.
 model RefreshToken {
-  id        String   @id @default(uuid())
-  accountId String   @map("account_id")
-  account   Account  @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  token     String   @unique
-  expiresAt DateTime @map("expires_at")
-  isRevoked Boolean  @default(false) @map("is_revoked")
-  createdAt DateTime @default(now()) @map("created_at")
+  id         String    @id @default(uuid())
+  accountId  String    @map("account_id")
+  account    Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  token      String    @unique
+  expiresAt  DateTime  @map("expires_at")
+  isRevoked  Boolean   @default(false) @map("is_revoked")
+  userAgent  String?   @map("user_agent")
+  ipAddress  String?   @map("ip_address")
+  deviceName String?   @map("device_name")
+  lastUsedAt DateTime? @map("last_used_at")
+  createdBy  String?   @map("created_by")
+  updatedBy  String?   @map("updated_by")
+  createdAt  DateTime  @default(now()) @map("created_at")
 
   @@index([accountId])
   @@index([token])

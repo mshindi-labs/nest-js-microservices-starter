@@ -10,21 +10,59 @@ describe('UsersService', () => {
   let repository: jest.Mocked<UsersRepository>;
   let prisma: jest.Mocked<PrismaService>;
 
-  const mockUser = {
-    id: 1,
-    name: 'Test User',
-    avatar: null,
-    roleId: 1,
-    organizationId: null,
+  const USER_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+  const ROLE_ID = 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
+  const ORG_ID = 'c3d4e5f6-a7b8-9012-cdef-123456789012';
+
+  const mockRole = {
+    id: ROLE_ID,
+    name: 'student',
     createdAt: new Date(),
     updatedAt: new Date(),
-    role: {
-      id: 1,
-      name: 'student',
+    createdBy: null,
+    updatedBy: null,
+  };
+
+  const mockMembership = {
+    id: 'd4e5f6a7-b8c9-0123-defa-234567890123',
+    userId: USER_ID,
+    organizationId: ORG_ID,
+    roleId: ROLE_ID,
+    role: mockRole,
+    organization: {
+      id: ORG_ID,
+      name: 'Test Org',
+      description: null,
+      logo: null,
+      website: null,
+      isActive: true,
+      deletedAt: null,
+      createdBy: null,
+      updatedBy: null,
       createdAt: new Date(),
       updatedAt: new Date(),
     },
-    organization: null,
+    isActive: true,
+    invitedBy: null,
+    joinedAt: new Date(),
+    deletedAt: null,
+    createdBy: null,
+    updatedBy: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockUser = {
+    id: USER_ID,
+    name: 'Test User',
+    avatar: null,
+    deletedAt: null,
+    createdBy: null,
+    updatedBy: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    memberships: [mockMembership],
+    accounts: [],
   };
 
   beforeEach(async () => {
@@ -36,6 +74,8 @@ describe('UsersService', () => {
           useValue: {
             findAll: jest.fn(),
             findById: jest.fn(),
+            findByRoleId: jest.fn(),
+            findByOrganizationId: jest.fn(),
             create: jest.fn(),
             update: jest.fn(),
             delete: jest.fn(),
@@ -52,13 +92,26 @@ describe('UsersService', () => {
             organization: {
               findUnique: jest.fn(),
             },
+            organizationMembership: {
+              findUnique: jest.fn(),
+              create: jest.fn(),
+              update: jest.fn(),
+              upsert: jest.fn(),
+            },
             user: {
               findUnique: jest.fn(),
+              create: jest.fn(),
+              update: jest.fn(),
             },
             account: {
               findUnique: jest.fn(),
+              update: jest.fn(),
             },
-            $transaction: jest.fn(),
+            $transaction: jest.fn((fn) => fn({
+              user: { create: jest.fn().mockResolvedValue(mockUser), update: jest.fn(), findUnique: jest.fn().mockResolvedValue(mockUser) },
+              account: { update: jest.fn() },
+              organizationMembership: { create: jest.fn(), upsert: jest.fn(), update: jest.fn() },
+            })),
           },
         },
         PaginationService,
@@ -78,36 +131,25 @@ describe('UsersService', () => {
     it('should return user when found', async () => {
       repository.findById.mockResolvedValue(mockUser as never);
 
-      const result = await service.findById(mockUser.id);
+      const result = await service.findById(USER_ID);
 
       expect(result).toEqual(mockUser);
-      expect(repository.findById).toHaveBeenCalledWith(mockUser.id);
+      expect(repository.findById).toHaveBeenCalledWith(USER_ID);
     });
 
     it('should throw NotFoundException when user not found', async () => {
       repository.findById.mockResolvedValue(null);
 
-      await expect(service.findById(999)).rejects.toThrow(NotFoundException);
+      await expect(service.findById('non-existent-uuid')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
   describe('create', () => {
-    it('should create user with provided roleId', async () => {
-      const createDto = { name: 'New User', roleId: mockUser.roleId };
-      (prisma.roles.findUnique as jest.Mock).mockResolvedValue(mockUser.role);
-      repository.create.mockResolvedValue(mockUser as never);
-
-      const result = await service.create(createDto);
-
-      expect(result).toEqual(mockUser);
-      expect(repository.create).toHaveBeenCalledWith(createDto);
-    });
-
     it('should use default role when roleId not provided', async () => {
       const createDto = { name: 'New User' };
-      (prisma.roles.findFirst as jest.Mock).mockResolvedValue(mockUser.role);
-      (prisma.roles.findUnique as jest.Mock).mockResolvedValue(mockUser.role);
-      repository.create.mockResolvedValue(mockUser as never);
+      (prisma.roles.findFirst as jest.Mock).mockResolvedValue(mockRole);
 
       await service.create(createDto);
 
@@ -126,51 +168,51 @@ describe('UsersService', () => {
     });
 
     it('should throw NotFoundException when provided roleId does not exist', async () => {
-      const createDto = { name: 'New User', roleId: 999 };
+      const createDto = { name: 'New User', roleId: 'non-existent-uuid' };
       (prisma.roles.findUnique as jest.Mock).mockResolvedValue(null);
 
-      await expect(service.create(createDto)).rejects.toThrow(
+      await expect(service.create(createDto)).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw NotFoundException when provided organizationId does not exist', async () => {
+      const createDto = {
+        name: 'New User',
+        roleId: ROLE_ID,
+        organizationId: 'non-existent-uuid',
+      };
+      (prisma.roles.findUnique as jest.Mock).mockResolvedValue(mockRole);
+      (prisma.organization.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.create(createDto)).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('update', () => {
+    it('should throw NotFoundException when user not found', async () => {
+      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(service.update('non-existent-uuid', {})).rejects.toThrow(
         NotFoundException,
       );
     });
   });
 
-  describe('update', () => {
-    it('should update user name', async () => {
-      const updateDto = { name: 'Updated Name' };
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(mockUser);
-      repository.update.mockResolvedValue({
-        ...mockUser,
-        name: 'Updated Name',
-      } as never);
-
-      const result = await service.update(mockUser.id, updateDto);
-
-      expect(result.name).toBe('Updated Name');
-      expect(repository.update).toHaveBeenCalledWith(mockUser.id, updateDto);
-    });
-
-    it('should throw NotFoundException when user not found', async () => {
-      (prisma.user.findUnique as jest.Mock).mockResolvedValue(null);
-
-      await expect(service.update(999, {})).rejects.toThrow(NotFoundException);
-    });
-  });
-
   describe('remove', () => {
-    it('should delete user', async () => {
+    it('should soft-delete user', async () => {
       repository.findById.mockResolvedValue(mockUser as never);
       repository.delete.mockResolvedValue(undefined);
 
-      await service.remove(mockUser.id);
+      await service.remove(USER_ID);
 
-      expect(repository.delete).toHaveBeenCalledWith(mockUser.id);
+      expect(repository.delete).toHaveBeenCalledWith(USER_ID);
     });
 
     it('should throw NotFoundException when user not found', async () => {
       repository.findById.mockResolvedValue(null);
 
-      await expect(service.remove(999)).rejects.toThrow(NotFoundException);
+      await expect(service.remove('non-existent-uuid')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

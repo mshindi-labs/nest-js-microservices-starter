@@ -3,15 +3,21 @@ import { of } from 'rxjs';
 import { AuthController } from './auth.controller';
 import { AUTH_SERVICE } from '@app/contracts';
 import { mockUser } from '@app/common/types/authenticated-request';
+import type { Request } from 'express';
 
 describe('AuthController (gateway)', () => {
   let controller: AuthController;
   const mockAuthClient = { send: jest.fn() };
 
+  const mockRequest = {
+    headers: { 'user-agent': 'test-agent' },
+    ip: '127.0.0.1',
+  } as unknown as Request;
+
   const mockAuthResponse = {
     accessToken: 'access.token.here',
     refreshToken: 'refresh.token.here',
-    user: { id: 1, name: 'Test User' },
+    user: { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890', name: 'Test User' },
   };
 
   beforeEach(async () => {
@@ -37,7 +43,7 @@ describe('AuthController (gateway)', () => {
         name: 'Test',
         identifier: 'test@example.com',
         msisdn: '+255612345678',
-        roleId: 1,
+        roleId: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
         password: 'Password123!',
         accountType: 'EMAIL' as never,
       };
@@ -50,21 +56,29 @@ describe('AuthController (gateway)', () => {
   });
 
   describe('login', () => {
-    it('should forward login request to auth-service', async () => {
+    it('should forward login request with userAgent and ipAddress', async () => {
       mockAuthClient.send.mockReturnValue(of(mockAuthResponse));
 
       const dto = { identifier: 'test@example.com', password: 'Password123!' };
 
-      const result = await controller.login(dto);
+      const result = await controller.login(dto, mockRequest);
 
-      expect(mockAuthClient.send).toHaveBeenCalledWith('auth.login', dto);
+      expect(mockAuthClient.send).toHaveBeenCalledWith('auth.login', {
+        ...dto,
+        userAgent: 'test-agent',
+        ipAddress: '127.0.0.1',
+      });
       expect(result).toEqual(mockAuthResponse);
     });
   });
 
   describe('getCurrentUser', () => {
     it('should forward getMe request with user context', async () => {
-      const currentUserResponse = { id: 'acc-id', userId: 1, user: {} };
+      const currentUserResponse = {
+        id: 'acc-id-uuid',
+        userId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+        user: {},
+      };
       mockAuthClient.send.mockReturnValue(of(currentUserResponse));
 
       const result = await controller.getCurrentUser(mockUser);

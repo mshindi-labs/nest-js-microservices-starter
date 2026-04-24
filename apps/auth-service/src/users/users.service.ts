@@ -26,7 +26,7 @@ export class UsersService {
   async findAll(
     page?: number,
     size?: number,
-    filters?: { roleId?: number; search?: string },
+    filters?: { roleId?: string; search?: string },
   ): Promise<PaginationResponse<User>> {
     try {
       return await this.paginationService.paginate({
@@ -41,7 +41,7 @@ export class UsersService {
     }
   }
 
-  async findById(id: number): Promise<User> {
+  async findById(id: string): Promise<User> {
     try {
       const user = await this.repository.findById(id);
       if (!user) {
@@ -53,7 +53,7 @@ export class UsersService {
     }
   }
 
-  async findByRoleId(roleId: number): Promise<User[]> {
+  async findByRoleId(roleId: string): Promise<User[]> {
     try {
       return await this.repository.findByRoleId(roleId);
     } catch (error) {
@@ -61,7 +61,7 @@ export class UsersService {
     }
   }
 
-  async findByOrganizationId(organizationId: number): Promise<User[]> {
+  async findByOrganizationId(organizationId: string): Promise<User[]> {
     try {
       return await this.repository.findByOrganizationId(organizationId);
     } catch (error) {
@@ -71,8 +71,8 @@ export class UsersService {
 
   async create(dto: CreateUserDto): Promise<User> {
     try {
-      let roleId = dto.roleId;
-      if (!roleId) {
+      let resolvedRoleId = dto.roleId;
+      if (!resolvedRoleId) {
         const defaultRole = await this.prisma.roles.findFirst({
           where: { name: 'other' },
         });
@@ -81,14 +81,14 @@ export class UsersService {
             'Default role "other" not found. Please specify a roleId.',
           );
         }
-        roleId = defaultRole.id;
-      }
-
-      const role = await this.prisma.roles.findUnique({
-        where: { id: roleId },
-      });
-      if (!role) {
-        throw new NotFoundException(`Role with ID ${roleId} not found`);
+        resolvedRoleId = defaultRole.id;
+      } else {
+        const role = await this.prisma.roles.findUnique({
+          where: { id: resolvedRoleId },
+        });
+        if (!role) {
+          throw new NotFoundException(`Role with ID ${resolvedRoleId} not found`);
+        }
       }
 
       if (dto.organizationId) {
@@ -102,43 +102,81 @@ export class UsersService {
         }
       }
 
-      return await this.repository.create({ ...dto, roleId });
+      return await this.prisma.$transaction(async (tx) => {
+        const user = await tx.user.create({
+          data: { name: dto.name, avatar: dto.avatar ?? null },
+          include: {
+            memberships: {
+              where: { deletedAt: null, isActive: true },
+              include: { role: true, organization: true },
+              orderBy: { joinedAt: 'asc' as const },
+            },
+            accounts: true,
+          },
+        });
+
+        if (dto.organizationId) {
+          await tx.organizationMembership.create({
+            data: {
+              userId: user.id,
+              organizationId: dto.organizationId,
+              roleId: resolvedRoleId,
+            },
+          });
+        }
+
+        return tx.user.findUnique({
+          where: { id: user.id },
+          include: {
+            memberships: {
+              where: { deletedAt: null, isActive: true },
+              include: { role: true, organization: true },
+              orderBy: { joinedAt: 'asc' as const },
+            },
+            accounts: true,
+          },
+        }) as Promise<User>;
+      });
     } catch (error) {
       raiseHttpError(error as unknown);
     }
   }
 
-  async update(id: number, dto: UpdateUserDto): Promise<User> {
+  async update(id: string, dto: UpdateUserDto): Promise<User> {
     try {
       const existingUser = await this.prisma.user.findUnique({
-        where: { id },
-        include: { role: true, accounts: true, organization: true },
+        where: { id, deletedAt: null },
+        include: {
+          memberships: {
+            where: { deletedAt: null, isActive: true },
+            orderBy: { joinedAt: 'asc' as const },
+          },
+          accounts: true,
+        },
       });
       if (!existingUser) {
         throw new NotFoundException(`User with ID ${id} not found`);
       }
 
-      if (dto.roleId) {
-        const role = await this.prisma.roles.findUnique({
-          where: { id: dto.roleId },
-        });
+      const { email, msisdn, roleId, organizationId, ...userFields } = dto;
+
+      if (roleId) {
+        const role = await this.prisma.roles.findUnique({ where: { id: roleId } });
         if (!role) {
-          throw new NotFoundException(`Role with ID ${dto.roleId} not found`);
+          throw new NotFoundException(`Role with ID ${roleId} not found`);
         }
       }
 
-      if (dto.organizationId) {
+      if (organizationId) {
         const organization = await this.prisma.organization.findUnique({
-          where: { id: dto.organizationId },
+          where: { id: organizationId },
         });
         if (!organization) {
           throw new NotFoundException(
-            `Organization with ID ${dto.organizationId} not found`,
+            `Organization with ID ${organizationId} not found`,
           );
         }
       }
-
-      const { email, msisdn, ...userFields } = dto;
 
       if (email) {
         const existingByEmail = await this.prisma.account.findUnique({
@@ -175,44 +213,77 @@ export class UsersService {
         );
       }
 
-      const accountToUpdate = accounts[0];
-      const accountUpdateData: { email?: string; msisdn?: string } = {};
-      if (email !== undefined) accountUpdateData.email = email;
-      if (msisdn !== undefined)
-        accountUpdateData.msisdn = normalizeMsisdn(msisdn);
+      return await this.prisma.$transaction(async (tx) => {
+        if (Object.keys(userFields).length > 0) {
+          await tx.user.update({ where: { id }, data: userFields });
+        }
 
-      if (Object.keys(accountUpdateData).length > 0) {
-        return await this.prisma.$transaction(async (tx) => {
-          if (Object.keys(userFields).length > 0) {
-            await tx.user.update({ where: { id }, data: userFields });
-          }
+        const accountToUpdate = accounts[0];
+        const accountUpdateData: { email?: string; msisdn?: string } = {};
+        if (email !== undefined) accountUpdateData.email = email;
+        if (msisdn !== undefined)
+          accountUpdateData.msisdn = normalizeMsisdn(msisdn);
+        if (Object.keys(accountUpdateData).length > 0 && accountToUpdate) {
           await tx.account.update({
             where: { id: accountToUpdate.id },
             data: accountUpdateData,
           });
-          const updatedUser = await tx.user.findUnique({
-            where: { id },
-            include: { role: true, accounts: true, organization: true },
-          });
-          if (!updatedUser) {
-            throw new NotFoundException(`User with ID ${id} not found`);
-          }
-          return updatedUser;
-        });
-      }
+        }
 
-      return await this.repository.update(id, userFields);
+        if (roleId || organizationId) {
+          const targetOrgId =
+            organizationId ??
+            existingUser.memberships[0]?.organizationId ??
+            null;
+          if (targetOrgId) {
+            await tx.organizationMembership.upsert({
+              where: { userId_organizationId: { userId: id, organizationId: targetOrgId } },
+              create: {
+                userId: id,
+                organizationId: targetOrgId,
+                roleId: roleId ?? existingUser.memberships[0]?.roleId ?? '',
+              },
+              update: {
+                ...(roleId ? { roleId } : {}),
+                isActive: true,
+                deletedAt: null,
+              },
+            });
+          } else if (roleId && existingUser.memberships.length > 0) {
+            await tx.organizationMembership.update({
+              where: { id: existingUser.memberships[0].id },
+              data: { roleId },
+            });
+          }
+        }
+
+        return tx.user.findUnique({
+          where: { id },
+          include: {
+            memberships: {
+              where: { deletedAt: null, isActive: true },
+              include: { role: true, organization: true },
+              orderBy: { joinedAt: 'asc' as const },
+            },
+            accounts: true,
+          },
+        }) as Promise<User>;
+      });
     } catch (error) {
       raiseHttpError(error as unknown);
     }
   }
 
-  async checkProfileStatus(userId: number): Promise<ProfileStatusResponseDto> {
+  async checkProfileStatus(userId: string): Promise<ProfileStatusResponseDto> {
     try {
       const user = await this.prisma.user.findUnique({
-        where: { id: userId },
+        where: { id: userId, deletedAt: null },
         include: {
-          role: true,
+          memberships: {
+            where: { deletedAt: null, isActive: true },
+            include: { role: true },
+            orderBy: { joinedAt: 'asc' as const },
+          },
           accounts: { select: { msisdn: true } },
         },
       });
@@ -223,7 +294,7 @@ export class UsersService {
 
       const msisdn = user.accounts.find((a) => a.msisdn)?.msisdn ?? null;
       const hasDefaultName = msisdn !== null && user.name === msisdn;
-      const hasDefaultRole = user.role.name === 'other';
+      const hasDefaultRole = user.memberships[0]?.role?.name === 'other';
 
       return {
         isProfileComplete: !hasDefaultName && !hasDefaultRole,
@@ -235,10 +306,57 @@ export class UsersService {
     }
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: string): Promise<void> {
     try {
       await this.findById(id);
       await this.repository.delete(id);
+    } catch (error) {
+      raiseHttpError(error as unknown);
+    }
+  }
+
+  async getUserMemberships(userId: string): Promise<unknown[]> {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId, deletedAt: null },
+        select: {
+          memberships: {
+            where: { deletedAt: null, isActive: true },
+            include: { role: true, organization: true },
+            orderBy: { joinedAt: 'asc' as const },
+          },
+        },
+      });
+
+      if (!user) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
+
+      return user.memberships;
+    } catch (error) {
+      raiseHttpError(error as unknown);
+    }
+  }
+
+  async removeFromOrganization(
+    userId: string,
+    organizationId: string,
+  ): Promise<void> {
+    try {
+      const membership = await this.prisma.organizationMembership.findUnique({
+        where: { userId_organizationId: { userId, organizationId } },
+      });
+
+      if (!membership || membership.deletedAt !== null) {
+        throw new NotFoundException(
+          `Membership for user ${userId} in organization ${organizationId} not found`,
+        );
+      }
+
+      await this.prisma.organizationMembership.update({
+        where: { userId_organizationId: { userId, organizationId } },
+        data: { deletedAt: new Date(), isActive: false },
+      });
     } catch (error) {
       raiseHttpError(error as unknown);
     }

@@ -22,26 +22,6 @@ export class OtpRepository {
     }
   }
 
-  async findValidOtp(
-    accountId: string,
-    code: string,
-    type: OTPType,
-  ): Promise<OTP | null> {
-    try {
-      return await this.prisma.oTP.findFirst({
-        where: {
-          accountId,
-          code,
-          type,
-          isUsed: false,
-          expiresAt: { gt: new Date() },
-        },
-      });
-    } catch (error) {
-      raiseHttpError(error as unknown);
-    }
-  }
-
   async markAsUsed(otpId: string): Promise<OTP> {
     try {
       return await this.prisma.oTP.update({

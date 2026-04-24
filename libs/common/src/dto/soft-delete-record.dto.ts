@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNumber, IsString } from 'class-validator';
+import { IsString, IsUUID } from 'class-validator';
 
 export class SoftDeleteRecordDto {
   @ApiProperty()
-  @IsNumber()
-  id: number;
+  @IsUUID()
+  id: string;
 
   @ApiProperty()
   @IsString()

@@ -2,87 +2,84 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Exclude, Expose, Type } from 'class-transformer';
 
 class RoleDto {
-  @ApiProperty({ description: 'The ID of the role', example: 1 })
+  @ApiProperty({ description: 'Role ID', example: 'uuid' })
   @Expose()
-  id: number;
+  id: string;
 
-  @ApiProperty({ description: 'The name of the role', example: 'Admin' })
+  @ApiProperty({ description: 'Role name', example: 'Admin' })
   @Expose()
   name: string;
 }
 
 class OrganizationDto {
-  @ApiProperty({ description: 'The ID of the organization', example: 1 })
+  @ApiProperty({ description: 'Organization ID', example: 'uuid' })
   @Expose()
-  id: number;
+  id: string;
 
-  @ApiProperty({
-    description: 'The name of the organization',
-    example: 'Organization 1',
-  })
+  @ApiProperty({ description: 'Organization name', example: 'Acme Corp' })
   @Expose()
   name: string;
 
-  @ApiPropertyOptional({
-    description: 'The description of the organization',
-    example: 'This is the first organization',
-    nullable: true,
-  })
+  @ApiPropertyOptional({ description: 'Organization description', nullable: true })
   @Expose()
   description: string | null;
 }
 
-export class UserResponseDto {
-  @ApiProperty({ description: 'The ID of the user', example: 1 })
+class MembershipDto {
+  @ApiProperty({ description: 'Membership ID', example: 'uuid' })
   @Expose()
-  id: number;
+  id: string;
 
-  @ApiProperty({ description: 'The name of the user', example: 'John Doe' })
+  @ApiProperty({ description: 'Organization ID', example: 'uuid' })
   @Expose()
-  name: string;
+  organizationId: string;
 
-  @ApiPropertyOptional({
-    description: 'The avatar of the user',
-    example: 'https://example.com/avatar.jpg',
-  })
+  @ApiPropertyOptional({ description: 'Organization details', type: OrganizationDto })
   @Expose()
-  avatar: string | null;
+  @Type(() => OrganizationDto)
+  organization?: OrganizationDto;
 
-  @ApiProperty({ description: 'The ID of the role', example: 1 })
+  @ApiProperty({ description: 'Role ID', example: 'uuid' })
   @Expose()
-  roleId: number;
+  roleId: string;
 
-  @ApiPropertyOptional({
-    description: 'The ID of the organization',
-    example: 1,
-  })
-  @Expose()
-  organizationId: number | null;
-
-  @ApiPropertyOptional({ description: 'The role of the user', type: RoleDto })
+  @ApiPropertyOptional({ description: 'Role details', type: RoleDto })
   @Expose()
   @Type(() => RoleDto)
   role?: RoleDto;
 
-  @ApiPropertyOptional({
-    description: 'The organization of the user',
-    type: OrganizationDto,
-  })
+  @ApiProperty({ description: 'Whether membership is active' })
   @Expose()
-  @Type(() => OrganizationDto)
-  organization?: OrganizationDto | null;
+  isActive: boolean;
 
-  @ApiProperty({
-    description: 'The timestamp when the user was created',
-    example: '2024-01-01T00:00:00.000Z',
-  })
+  @ApiProperty({ description: 'When the user joined the organization' })
+  @Expose()
+  joinedAt: Date;
+}
+
+export class UserResponseDto {
+  @ApiProperty({ description: 'User ID', example: 'uuid' })
+  @Expose()
+  id: string;
+
+  @ApiProperty({ description: 'User name', example: 'John Doe' })
+  @Expose()
+  name: string;
+
+  @ApiPropertyOptional({ description: 'Avatar URL', nullable: true })
+  @Expose()
+  avatar: string | null;
+
+  @ApiPropertyOptional({ description: 'Organization memberships', type: [MembershipDto] })
+  @Expose()
+  @Type(() => MembershipDto)
+  memberships?: MembershipDto[];
+
+  @ApiProperty({ description: 'Created at' })
   @Expose()
   createdAt: Date;
 
-  @ApiProperty({
-    description: 'The timestamp when the user was updated',
-    example: '2024-01-01T00:00:00.000Z',
-  })
+  @ApiProperty({ description: 'Updated at' })
   @Expose()
   updatedAt: Date;
 

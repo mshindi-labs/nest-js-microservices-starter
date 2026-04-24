@@ -13,6 +13,12 @@ import type {
   RequestOtpPayload,
   VerifyOtpPayload,
   GoogleCallbackPayload,
+  ListSessionsPayload,
+  RevokeSessionPayload,
+  RevokeAllSessionsPayload,
+  SendEmailVerificationPayload,
+  VerifyEmailPayload,
+  SwitchOrgPayload,
 } from '@app/contracts/auth/auth.payloads';
 
 @Controller()
@@ -84,5 +90,45 @@ export class AuthController {
   @MessagePattern(AUTH_PATTERNS.GOOGLE_CALLBACK)
   googleCallback(@Payload() payload: GoogleCallbackPayload) {
     return this.authService.signInWithGoogle(payload);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.LIST_SESSIONS)
+  listSessions(@Payload() payload: ListSessionsPayload) {
+    return this.authService.listSessions(payload.context.accountId);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.REVOKE_SESSION)
+  revokeSession(@Payload() payload: RevokeSessionPayload) {
+    return this.authService.revokeSession(
+      payload.context.accountId,
+      payload.sessionId,
+    );
+  }
+
+  @MessagePattern(AUTH_PATTERNS.REVOKE_ALL_SESSIONS)
+  revokeAllSessions(@Payload() payload: RevokeAllSessionsPayload) {
+    return this.authService.revokeAllSessions(payload.context.accountId);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.SEND_EMAIL_VERIFICATION)
+  sendEmailVerification(@Payload() payload: SendEmailVerificationPayload) {
+    return this.authService.sendEmailVerification(payload.context.accountId);
+  }
+
+  @MessagePattern(AUTH_PATTERNS.VERIFY_EMAIL)
+  verifyEmail(@Payload() payload: VerifyEmailPayload) {
+    return this.authService.verifyEmail(
+      payload.context.accountId,
+      payload.otpCode,
+    );
+  }
+
+  @MessagePattern(AUTH_PATTERNS.SWITCH_ORG)
+  switchOrganization(@Payload() payload: SwitchOrgPayload) {
+    return this.authService.switchOrganization(
+      payload.context.userId,
+      payload.context.accountId,
+      payload.organizationId,
+    );
   }
 }

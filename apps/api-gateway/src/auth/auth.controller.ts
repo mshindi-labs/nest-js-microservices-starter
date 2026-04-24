@@ -6,16 +6,24 @@ import {
   HttpStatus,
   Patch,
   Get,
+  Delete,
   UseGuards,
   Req,
   Res,
   Inject,
+  Param,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { ClientProxy } from '@nestjs/microservices';
 import { firstValueFrom } from 'rxjs';
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
-import { ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiTags,
+} from '@nestjs/swagger';
 import { Public } from './guards/public.decorator';
 import { Open } from './guards/open.decorator';
 import { GoogleAuthGuard } from './guards';
@@ -34,11 +42,14 @@ import type {
 } from './dto/reset-password.dto';
 import type { RequestOtpDto } from './dto/request-otp.dto';
 import type { VerifyOtpDto } from './dto/verify-otp.dto';
+import type { SwitchOrgDto } from './dto/switch-org.dto';
 import {
   AuthResponseDto,
   CurrentUserResponseDto,
 } from './dto/auth-response.dto';
+import { SessionResponseDto } from './dto/session-response.dto';
 
+@ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
   constructor(@Inject(AUTH_SERVICE) private readonly authClient: ClientProxy) {}
@@ -59,8 +70,17 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login a user' })
   @ApiResponse({ status: 200, type: AuthResponseDto })
-  login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
-    return firstValueFrom(this.authClient.send(AUTH_PATTERNS.LOGIN, dto));
+  login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+  ): Promise<AuthResponseDto> {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.LOGIN, {
+        ...dto,
+        userAgent: req.headers['user-agent'] ?? null,
+        ipAddress: req.ip ?? null,
+      }),
+    );
   }
 
   @Public()
@@ -68,8 +88,17 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Refresh access token using refresh token' })
   @ApiResponse({ status: 200, type: AuthResponseDto })
-  refreshToken(@Body() dto: RefreshTokenDto): Promise<AuthResponseDto> {
-    return firstValueFrom(this.authClient.send(AUTH_PATTERNS.REFRESH, dto));
+  refreshToken(
+    @Body() dto: RefreshTokenDto,
+    @Req() req: Request,
+  ): Promise<AuthResponseDto> {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.REFRESH, {
+        ...dto,
+        userAgent: req.headers['user-agent'] ?? null,
+        ipAddress: req.ip ?? null,
+      }),
+    );
   }
 
   @ApiBearerAuth('access-token')
@@ -141,8 +170,17 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify OTP and login' })
   @ApiResponse({ status: 200, type: AuthResponseDto })
-  verifyOtp(@Body() dto: VerifyOtpDto): Promise<AuthResponseDto> {
-    return firstValueFrom(this.authClient.send(AUTH_PATTERNS.OTP_VERIFY, dto));
+  verifyOtp(
+    @Body() dto: VerifyOtpDto,
+    @Req() req: Request,
+  ): Promise<AuthResponseDto> {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.OTP_VERIFY, {
+        ...dto,
+        userAgent: req.headers['user-agent'] ?? null,
+        ipAddress: req.ip ?? null,
+      }),
+    );
   }
 
   @ApiBearerAuth('access-token')
@@ -157,6 +195,95 @@ export class AuthController {
   ): Promise<CurrentUserResponseDto> {
     return firstValueFrom(
       this.authClient.send(AUTH_PATTERNS.ME, { context: user }),
+    );
+  }
+
+  @ApiBearerAuth('access-token')
+  @Get('sessions')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'List active sessions for the current user' })
+  @ApiResponse({ status: 200, type: [SessionResponseDto] })
+  listSessions(@User() user: AuthorizedUser): Promise<SessionResponseDto[]> {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.LIST_SESSIONS, { context: user }),
+    );
+  }
+
+  @ApiBearerAuth('access-token')
+  @Delete('sessions/:session_id')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Revoke a specific session' })
+  @ApiResponse({ status: 200, type: OkResponseDto })
+  async revokeSession(
+    @User() user: AuthorizedUser,
+    @Param('session_id', ParseUUIDPipe) sessionId: string,
+  ): Promise<OkResponseDto> {
+    await firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.REVOKE_SESSION, {
+        sessionId,
+        context: user,
+      }),
+    );
+    return { message: 'Session revoked successfully' };
+  }
+
+  @ApiBearerAuth('access-token')
+  @Delete('sessions')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Revoke all sessions for the current user' })
+  @ApiResponse({ status: 200, type: OkResponseDto })
+  async revokeAllSessions(@User() user: AuthorizedUser): Promise<OkResponseDto> {
+    await firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.REVOKE_ALL_SESSIONS, { context: user }),
+    );
+    return { message: 'All sessions revoked successfully' };
+  }
+
+  @ApiBearerAuth('access-token')
+  @Throttle({ long: { limit: 3, ttl: 600_000 } })
+  @Post('email/verification/send')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send email verification OTP' })
+  @ApiResponse({ status: 200, type: OkResponseDto })
+  sendEmailVerification(@User() user: AuthorizedUser): Promise<OkResponseDto> {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.SEND_EMAIL_VERIFICATION, {
+        context: user,
+      }),
+    );
+  }
+
+  @ApiBearerAuth('access-token')
+  @Post('email/verify')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify email with OTP code' })
+  @ApiResponse({ status: 200, type: OkResponseDto })
+  verifyEmail(
+    @User() user: AuthorizedUser,
+    @Body('otpCode') otpCode: string,
+  ): Promise<OkResponseDto> {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.VERIFY_EMAIL, {
+        otpCode,
+        context: user,
+      }),
+    );
+  }
+
+  @ApiBearerAuth('access-token')
+  @Post('org/switch')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Switch active organization context' })
+  @ApiResponse({ status: 200, type: AuthResponseDto })
+  switchOrganization(
+    @User() user: AuthorizedUser,
+    @Body() dto: SwitchOrgDto,
+  ): Promise<AuthResponseDto> {
+    return firstValueFrom(
+      this.authClient.send(AUTH_PATTERNS.SWITCH_ORG, {
+        ...dto,
+        context: user,
+      }),
     );
   }
 

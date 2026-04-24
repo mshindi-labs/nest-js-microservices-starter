@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '@app/prisma';
 import { RefreshToken } from 'generated/prisma/client';
 import { raiseHttpError } from '@app/common/utils/raise-http-error';
@@ -7,6 +7,9 @@ export interface CreateRefreshTokenData {
   accountId: string;
   token: string;
   expiresAt: Date;
+  userAgent?: string;
+  ipAddress?: string;
+  deviceName?: string;
 }
 
 @Injectable()
@@ -32,6 +35,21 @@ export class RefreshTokensRepository {
     }
   }
 
+  async findActiveByAccountId(accountId: string): Promise<RefreshToken[]> {
+    try {
+      return await this.prisma.refreshToken.findMany({
+        where: {
+          accountId,
+          isRevoked: false,
+          expiresAt: { gt: new Date() },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    } catch (error) {
+      raiseHttpError(error as unknown);
+    }
+  }
+
   async revokeToken(token: string): Promise<RefreshToken> {
     try {
       return await this.prisma.refreshToken.update({
@@ -41,6 +59,33 @@ export class RefreshTokensRepository {
     } catch (error) {
       raiseHttpError(error as unknown);
     }
+  }
+
+  async revokeById(sessionId: string, accountId: string): Promise<void> {
+    try {
+      const session = await this.prisma.refreshToken.findUnique({
+        where: { id: sessionId },
+        select: { accountId: true },
+      });
+
+      if (!session || session.accountId !== accountId) {
+        throw new ForbiddenException('Session not found or access denied');
+      }
+
+      await this.prisma.refreshToken.update({
+        where: { id: sessionId },
+        data: { isRevoked: true },
+      });
+    } catch (error) {
+      raiseHttpError(error as unknown);
+    }
+  }
+
+  async updateLastUsedAt(tokenId: string): Promise<void> {
+    await this.prisma.refreshToken.update({
+      where: { id: tokenId },
+      data: { lastUsedAt: new Date() },
+    });
   }
 
   async revokeAllTokensForAccount(accountId: string): Promise<void> {

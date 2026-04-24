@@ -5,6 +5,7 @@ import {
   User,
   Roles,
   Organization,
+  OrganizationMembership,
 } from 'generated/prisma/client';
 import { raiseHttpError } from '@app/common/utils/raise-http-error';
 import {
@@ -13,7 +14,7 @@ import {
 } from '@app/common/constants';
 
 export interface CreateAccountData {
-  userId: number;
+  userId: string;
   email?: string;
   msisdn?: string;
   password?: string;
@@ -23,7 +24,7 @@ export interface CreateAccountData {
 
 export interface AccountWithUser {
   id: string;
-  userId: number;
+  userId: string;
   email: string | null;
   msisdn: string | null;
   password: string | null;
@@ -34,13 +35,28 @@ export interface AccountWithUser {
   isActive: boolean;
   failedLoginAttempts: number;
   lockedUntil: Date | null;
+  lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   user: User & {
-    role: Roles | null;
-    organization: Organization | null;
+    memberships: (OrganizationMembership & {
+      role: Roles;
+      organization: Organization;
+    })[];
   };
 }
+
+const USER_WITH_MEMBERSHIPS_INCLUDE = {
+  user: {
+    include: {
+      memberships: {
+        where: { deletedAt: null, isActive: true },
+        include: { role: true, organization: true },
+        orderBy: { joinedAt: 'asc' as const },
+      },
+    },
+  },
+} as const;
 
 @Injectable()
 export class AccountsRepository {
@@ -53,7 +69,7 @@ export class AccountsRepository {
     try {
       const account = await this.prisma.account.findUnique({
         where: { email },
-        include: { user: { include: { role: true, organization: true } } },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
 
       if (throwWhenNotFound && !account) {
@@ -72,7 +88,7 @@ export class AccountsRepository {
     try {
       const account = await this.prisma.account.findUnique({
         where: { msisdn },
-        include: { user: { include: { role: true, organization: true } } },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
 
       if (throwWhenNotFound && !account) {
@@ -91,7 +107,7 @@ export class AccountsRepository {
     try {
       const account = await this.prisma.account.findUnique({
         where: { id },
-        include: { user: { include: { role: true, organization: true } } },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
 
       if (throwWhenNotFound && !account) {
@@ -110,7 +126,7 @@ export class AccountsRepository {
     try {
       const account = await this.prisma.account.findUnique({
         where: { googleId },
-        include: { user: { include: { role: true, organization: true } } },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
 
       if (throwWhenNotFound && !account) {
@@ -125,13 +141,13 @@ export class AccountsRepository {
   }
 
   async findByUserId(
-    userId: number,
+    userId: string,
     throwWhenNotFound = true,
   ): Promise<AccountWithUser[]> {
     try {
       const accounts = await this.prisma.account.findMany({
         where: { userId },
-        include: { user: { include: { role: true, organization: true } } },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
 
       if (throwWhenNotFound && !accounts) {
@@ -149,7 +165,7 @@ export class AccountsRepository {
     try {
       const account = await this.prisma.account.create({
         data,
-        include: { user: { include: { role: true, organization: true } } },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
       return account as AccountWithUser;
     } catch (error) {
@@ -165,7 +181,7 @@ export class AccountsRepository {
       const account = await this.prisma.account.update({
         where: { id: accountId },
         data: { password: hashedPassword },
-        include: { user: { include: { role: true, organization: true } } },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
 
       if (!account) {
@@ -191,12 +207,19 @@ export class AccountsRepository {
       const account = await this.prisma.account.update({
         where: { id: accountId },
         data,
-        include: { user: { include: { role: true, organization: true } } },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
       return account as AccountWithUser;
     } catch (error) {
       raiseHttpError(error as unknown);
     }
+  }
+
+  async updateLastLoginAt(accountId: string): Promise<void> {
+    await this.prisma.account.update({
+      where: { id: accountId },
+      data: { lastLoginAt: new Date() },
+    });
   }
 
   async incrementFailedLoginAttempts(accountId: string): Promise<void> {
@@ -238,7 +261,7 @@ export class AccountsRepository {
       const account = await this.prisma.account.update({
         where: { id: accountId },
         data: updateData,
-        include: { user: { include: { role: true, organization: true } } },
+        include: USER_WITH_MEMBERSHIPS_INCLUDE,
       });
 
       if (!account) {

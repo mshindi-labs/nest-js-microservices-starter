@@ -12,8 +12,8 @@ export class CurrentUserResponseDto {
   @ApiProperty({ description: 'Account ID', example: 'uuid' })
   id: string;
 
-  @ApiProperty({ description: 'User ID', example: 1 })
-  userId: number;
+  @ApiProperty({ description: 'User ID', example: 'uuid' })
+  userId: string;
 
   @ApiPropertyOptional({ description: 'Email address', nullable: true })
   email: string | null;
@@ -33,6 +33,9 @@ export class CurrentUserResponseDto {
   @ApiProperty({ description: 'Whether account is active' })
   isActive: boolean;
 
+  @ApiPropertyOptional({ description: 'Last login timestamp', nullable: true })
+  lastLoginAt: Date | null;
+
   @ApiProperty({ description: 'Account creation timestamp' })
   createdAt: Date;
 
@@ -42,8 +45,8 @@ export class CurrentUserResponseDto {
   @ApiProperty({ description: 'User details', type: UserResponseDto })
   user: UserResponseDto;
 
-  @ApiPropertyOptional({ description: 'User role (convenience)', type: Object })
-  role?: { id: number; name: string; createdAt: Date; updatedAt: Date };
+  @ApiPropertyOptional({ description: 'Active role (convenience)', type: Object })
+  role?: { id: string; name: string; createdAt: Date; updatedAt: Date };
 }
 
 export type { JwtPayload } from '@app/contracts';

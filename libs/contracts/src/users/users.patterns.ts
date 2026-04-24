@@ -5,6 +5,8 @@ export const USERS_PATTERNS = {
   CREATE: 'users.create',
   UPDATE: 'users.update',
   DELETE: 'users.delete',
+  GET_MEMBERSHIPS: 'users.memberships',
+  REMOVE_FROM_ORG: 'users.org.remove',
 } as const;
 
 export type UsersPattern = (typeof USERS_PATTERNS)[keyof typeof USERS_PATTERNS];

@@ -3,36 +3,30 @@ import {
   IsNotEmpty,
   IsOptional,
   MaxLength,
-  IsNumber,
+  IsUUID,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateUserDto {
-  @ApiProperty({ description: 'The name of the user', example: 'John Doe' })
+  @ApiProperty({ description: 'User name', example: 'John Doe' })
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
   name: string;
 
-  @ApiPropertyOptional({
-    description: 'The avatar of the user',
-    example: 'https://example.com/avatar.jpg',
-  })
+  @ApiPropertyOptional({ description: 'Avatar URL', example: 'https://example.com/avatar.jpg' })
   @IsString()
   @IsOptional()
   @MaxLength(500)
   avatar?: string;
 
-  @ApiPropertyOptional({ description: 'The role ID of the user', example: 1 })
-  @IsNumber()
+  @ApiPropertyOptional({ description: 'Role UUID', example: 'uuid' })
+  @IsUUID()
   @IsOptional()
-  roleId?: number;
+  roleId?: string;
 
-  @ApiPropertyOptional({
-    description: 'The organization ID of the user',
-    example: 1,
-  })
-  @IsNumber()
+  @ApiPropertyOptional({ description: 'Organization UUID', example: 'uuid' })
+  @IsUUID()
   @IsOptional()
-  organizationId?: number;
+  organizationId?: string;
 }
