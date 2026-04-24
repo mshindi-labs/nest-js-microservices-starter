@@ -1,3 +1,18 @@
+## 1.0.0 (2026-04-24)
+
+### ⚠ BREAKING CHANGES
+
+- **auth:** User, Organization, and Role IDs are now UUIDs; routes that
+  previously accepted integer :user_id params now use ParseUUIDPipe and return
+  400 for non-UUID values. JWT access tokens expire in 15 minutes instead of
+  7 days — clients must implement refresh-token rotation.
+
+Migration: pnpm prisma migrate dev --name auth-foundation && pnpm prisma generate
+
+### Features
+
+- **auth:** multi-org membership, auth hardening, and org scalability ([cc87be4](https://github.com/mshindi-labs/nest-js-microservices-starter/commit/cc87be46f6de6b869e3acd0a35290e100d1e7e33))
+
 ## 1.0.0 (2026-03-19)
 
 ### Features
