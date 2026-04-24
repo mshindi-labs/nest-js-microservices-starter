@@ -11,7 +11,7 @@ Migration: pnpm prisma migrate dev --name auth-foundation && pnpm prisma generat
 
 ### Features
 
-- **auth:** multi-org membership, auth hardening, and org scalability ([cc87be4](https://github.com/mshindi-labs/nest-js-microservices-starter/commit/cc87be46f6de6b869e3acd0a35290e100d1e7e33))
+- **auth:** multi-org membership, auth hardening, and org scalability ([cc87be4](https://github.com/mshindi-labs/mshindi-las-core/commit/cc87be46f6de6b869e3acd0a35290e100d1e7e33))
 
 ## 1.0.0 (2026-03-19)
 
